@@ -453,7 +453,7 @@ function renderSetup() {
         const av = getAvatar(m.name);
         return `<div class="slot-item">
           <div class="slot-num">${slot+1}</div>
-          <div class="slot-card" draggable="true" data-dti="${i}" data-dslot="${slot}" data-src="slot" style="background:${t.color}88;border-color:${t.color}">
+          <div class="slot-card" draggable="true" data-dti="${i}" data-dslot="${slot}" data-src="slot" style="background:${t.color}88;border-color:${t.color}${state.log.length > 0 ? ';cursor:not-allowed;opacity:.6' : ''}">
             <div class="drag-handle">⠿</div>
             ${av ? `<img class="slot-card-img" src="${av}" alt="${m.name}">` : `<div class="slot-card-img" style="background:${t.color};display:flex;align-items:center;justify-content:center;font-size:1.2rem">👤</div>`}
             <div class="slot-card-name" style="color:${getTextColor(t.color)}">${m.name}</div>
@@ -488,8 +488,12 @@ function renderSetup() {
     <div class="slabel">미배정 멤버 (${state.unassigned.length}명)</div>
     <div class="pool">${poolHtml}</div>
     <div class="slot-legend" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-      <div class="sleg">미배정 → 팀 슬롯으로 드래그해서 배정 &nbsp;·&nbsp; 팀 슬롯 → 미배정 풀로 드래그해서 해제</div>
-      <button class="btn btn-ghost btn-sm" id="btnRandom">🎲 무작위 배치</button>
+      ${state.log.length > 0
+        ? `<div class="sleg" style="color:#FF4757">🔒 게임 진행 중 팀 구성 변경 불가 — 금액 초기화 시 해제</div>
+           <button class="btn btn-ghost btn-sm" disabled style="opacity:.35;cursor:not-allowed">🎲 무작위 배치</button>`
+        : `<div class="sleg">미배정 → 팀 슬롯으로 드래그해서 배정 &nbsp;·&nbsp; 팀 슬롯 → 미배정 풀로 드래그해서 해제</div>
+           <button class="btn btn-ghost btn-sm" id="btnRandom">🎲 무작위 배치</button>`
+      }
     </div>
     <div class="setup-teams">${teamsHtml}</div>
     <div class="setup-actions">
@@ -705,6 +709,7 @@ function bind() {
 
   // ── 드래그 통합 (팀 편성) ──────────────────────────────────────
   if (state.phase === 'setup') {
+    const locked = state.log.length > 0;
     let dragSrc = null; // { type:'pool'|'slot', name, ti?, slot? }
 
     function clearDragOver() {
@@ -714,6 +719,7 @@ function bind() {
     // 미배정 mcard 드래그
     document.querySelectorAll('.mcard[draggable="true"]').forEach(el => {
       el.addEventListener('dragstart', e => {
+        if (locked) { e.preventDefault(); return; }
         dragSrc = { type: 'pool', name: el.dataset.member };
         e.dataTransfer.effectAllowed = 'move';
         setTimeout(() => el.classList.add('dragging'), 0);
@@ -724,6 +730,7 @@ function bind() {
     // 배정된 slot-card 드래그
     document.querySelectorAll('.slot-card[draggable="true"]').forEach(el => {
       el.addEventListener('dragstart', e => {
+        if (locked) { e.preventDefault(); return; }
         dragSrc = { type: 'slot', ti: parseInt(el.dataset.dti), slot: parseInt(el.dataset.dslot) };
         e.dataTransfer.effectAllowed = 'move';
         setTimeout(() => el.classList.add('dragging'), 0);
@@ -832,6 +839,7 @@ function bind() {
   });
 
   on('btnRandom', () => {
+    if (state.log.length > 0) return;
     const all = [
       ...state.unassigned,
       ...state.teams.flatMap(t => t.members.filter(Boolean).map(m => m.name))
