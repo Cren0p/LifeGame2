@@ -289,7 +289,7 @@ setTimeout(() => {
 }, 5000);
 
 // ── 멤버 로스터 (구글 시트에서 로드) ─────────────────────────────
-// 시트 형식: 1행 헤더(항상 무시), 2행부터 A열 숲ID, B열 닉네임(비어 있으면 API 자동 조회).
+// 시트 형식: 1행부터 A열 숲ID, B열 닉네임(비어 있으면 API 자동 조회).
 // 공유 설정 "링크가 있는 모든 사용자: 뷰어" 필요. 팀 구성상 12명 기준으로 동작합니다.
 const ROSTER_CSV_URL = 'https://docs.google.com/spreadsheets/d/1J29cMm54XYmEHsCMV3SRqI4Z2C7mKspspJ0Rg3x2cto/gviz/tq?tqx=out:csv&gid=1828326063';
 const SOOP_ID_RE = /^[a-z0-9_]{2,20}$/;
@@ -298,9 +298,24 @@ let NICK2ID = {};      // { 닉네임: 숲ID } — 아바타 URL용
 let rosterLoaded = false;
 
 function parseCsvLine(line) {
-  // gviz out:csv는 모든 셀을 따옴표로 감쌈 → 양쪽 따옴표 제거 후 분리
-  if (line.startsWith('"')) return line.replace(/^"|"$/g, '').split('","');
-  return line.split(',');
+  // 셀 단위 파서: 따옴표 유무 혼합(숫자 셀은 따옴표 없이 나옴)·셀 내 콤마·이스케이프 따옴표("") 처리
+  const cells = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQ) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++; }
+        else inQ = false;
+      } else cur += ch;
+    } else {
+      if (ch === '"') inQ = true;
+      else if (ch === ',') { cells.push(cur); cur = ''; }
+      else cur += ch;
+    }
+  }
+  cells.push(cur);
+  return cells;
 }
 
 function soopImg(id) { return `https://profile.img.sooplive.com/LOGO/${id.slice(0,2)}/${id}/${id}.jpg`; }
@@ -310,8 +325,7 @@ async function loadRoster() {
   try {
     const res = await fetch(ROSTER_CSV_URL, { cache: 'no-store' });
     if (!res.ok) throw new Error(res.status);
-    (await res.text()).split(/\r?\n/).forEach((line, li) => {
-      if (li === 0) return; // 1행은 헤더
+    (await res.text()).split(/\r?\n/).forEach(line => {
       const cells = parseCsvLine(line);
       const id = (cells[0] || '').trim().toLowerCase();
       const nick = (cells[1] || '').trim();
